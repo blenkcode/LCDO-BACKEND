@@ -77,13 +77,11 @@ router.delete("/deleteArtist", (req, res) => {
           .status(404)
           .json({ result: false, error: "Artist not found" });
       } else {
-        return res
-          .status(200)
-          .json({
-            result: true,
-            success: "Artist successfully deleted",
-            artist,
-          });
+        return res.status(200).json({
+          result: true,
+          success: "Artist successfully deleted",
+          artist,
+        });
       }
     })
     .catch((error) => {
