@@ -7,48 +7,113 @@ const User = require("../models/users");
 const { checkBody } = require("../modules/checkBody");
 const uid2 = require("uid2");
 const bcrypt = require("bcrypt");
+const { z } = require("zod");
+const jwt = require("jsonwebtoken");
 
-//inscription
-
-router.post("/signup", (req, res) => {
-  if (!checkBody(req.body, ["pseudo", "email", "password"])) {
-    res.json({ result: false, error: "Missing or empty fields" });
-    return;
-  }
-
-  User.findOne({ pseudo: req.body.pseudo }).then((data) => {
-    if (data === null) {
-      const hash = bcrypt.hashSync(req.body.password, 10);
-
-      const newUser = new User({
-        pseudo: req.body.pseudo,
-        email: req.body.email,
-        password: hash,
-        token: uid2(32),
-      });
-
-      newUser.save().then((newDoc) => {
-        res.json({ result: true, token: newDoc.token });
-      });
-    } else {
-      // User already exists in database
-      res.json({ result: false, error: "User already exists" });
-    }
-  });
+// Définir le schéma Zod pour la route signup
+const signupSchema = z.object({
+  pseudo: z
+    .string()
+    .min(2, { message: "Pseudo must be at least 2 characters long" }), // Valide que pseudo est une chaîne non vide
+  email: z.string().email({ message: "Invalid email address " }), // Valide que l'email est correct
+  password: z
+    .string()
+    .min(6, { message: " Password must be at least 6 characters long" }), // Exige un mot de passe d'au moins 6 caractères
 });
+
+const signinSchema = z.object({
+  email: z.string().email({ message: "Invalid email address " }), // Valide que l'email est correct
+  password: z
+    .string()
+    .min(6, { message: " Password must be at least 6 characters long" }), // Exige un mot de passe d'au moins 6 caractères
+});
+const JWT_SECRET =
+  process.env.JWT_SECRET ||
+  //inscription
+
+  router.post("/signup", (req, res) => {
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.json({ result: false, error: "All fields must be specified" });
+    }
+
+    // Valider les données du corps de la requête avec Zod
+    const validation = signupSchema.safeParse(req.body);
+
+    if (!validation.success) {
+      return res.json({
+        result: false,
+        error: validation.error.errors[0].message,
+      });
+    }
+    const adminEmails = process.env.ADMIN_USERS.split(",");
+    const isAdmin = adminEmails.includes(req.body.email);
+    // Si la validation passe, poursuivre avec l'inscription
+    User.findOne({ pseudo: req.body.pseudo, email: req.body.email }).then(
+      (data) => {
+        if (data === null) {
+          const hash = bcrypt.hashSync(req.body.password, 10);
+
+          const newUser = new User({
+            pseudo: req.body.pseudo,
+            email: req.body.email,
+            password: hash,
+            role: isAdmin ? "admin" : "user",
+          });
+
+          newUser.save().then((newDoc) => {
+            const user = {
+              pseudo: newDoc.pseudo,
+              email: newDoc.email,
+              role: newDoc.role,
+              token: newDoc.token,
+              // D'autres champs si nécessaire
+            };
+            // Générer un JWT pour l'utilisateur
+            const token = jwt.sign(
+              { id: newDoc._id, role: newDoc.role }, // Payload
+              JWT_SECRET, // Clé secrète
+              { expiresIn: "24h" } // Expiration du token (1 heure ici)
+            );
+            res.json({
+              result: true,
+              user: user,
+              token: token, // Renvoyer l'objet utilisateur ici
+              success: "Successfully registered!",
+            });
+          });
+        } else {
+          // L'utilisateur existe déjà dans la base de données
+          res.json({ result: false, error: "User already exists" });
+        }
+      }
+    );
+  });
 
 //connexion
 router.post("/signin", (req, res) => {
-  if (!checkBody(req.body, ["pseudo", "password"])) {
-    res.json({ result: false, error: "Missing or empty fields" });
-    return;
+  // Valider les données du corps de la requête avec Zod
+  const validation = signinSchema.safeParse(req.body);
+
+  if (!validation.success) {
+    return res.json({
+      result: false,
+      error: validation.error.errors[0].message,
+    });
   }
 
-  User.findOne({ pseudo: req.body.pseudo }).then((data) => {
+  // Si la validation passe, poursuivre avec la connexion
+  User.findOne({ email: req.body.email }).then((data) => {
     if (data && bcrypt.compareSync(req.body.password, data.password)) {
+      const token = jwt.sign(
+        { id: data._id, role: data.role }, // Payload
+        JWT_SECRET, // Clé secrète
+        { expiresIn: "24h" } // Expiration du token (1 heure ici)
+      );
       res.json({
         result: true,
-        data: data,
+        success: "Successfully logged! ",
+        user: data,
+        token: token,
       });
     } else {
       res.json({ result: false, error: "User not found or wrong password" });
@@ -56,164 +121,4 @@ router.post("/signin", (req, res) => {
   });
 });
 
-// Route pour mettre à jour les informations de l'utilisateur avec le token
-router.put("/initData/:token", (req, res) => {
-  const token = req.params.token;
-
-  User.findOne({ token })
-    .then((user) => {
-      if (!user) {
-        return res.status(404).json({ result: false, error: "User not found" });
-      }
-
-      // Ajouter les nouvelles entrées de poids aux poids existants
-      const updatedWeights = [...user.weights, ...req.body.weights];
-
-      // Mettre à jour les informations de l'utilisateur
-      return User.findByIdAndUpdate(
-        user._id,
-        {
-          age: req.body.age,
-          gender: req.body.gender,
-          height: req.body.height,
-          weight: req.body.weight,
-          weights: updatedWeights,
-          activityLevel: req.body.activityLevel,
-          BMR: req.body.BMR,
-          TDEE: req.body.TDEE,
-          caloriesDeficit: req.body.caloriesDeficit,
-        },
-        { new: true, runValidators: true } // Retourner le document mis à jour et appliquer les validations
-      );
-    })
-    .then((updatedUser) => {
-      if (!updatedUser) {
-        return res.status(404).json({ result: false, error: "User not found" });
-      }
-
-      res.json({
-        result: true,
-        user: updatedUser,
-      });
-    })
-    .catch((error) => {
-      console.error("Error updating user:", error);
-      res.status(500).json({ result: false, error: error.message });
-    });
-});
-
-// route pour mettre à jour TDEE et BMR :
-router.put("/updateData/:token", (req, res) => {
-  const token = req.params.token;
-
-  User.findOne({ token })
-    .then((user) => {
-      if (!user) {
-        return res.status(404).json({ result: false, error: "User not found" });
-      }
-
-      // Ajouter les nouvelles entrées de poids aux poids existants
-
-      // Mettre à jour les informations de l'utilisateur
-      return User.findByIdAndUpdate(
-        user._id,
-        {
-          BMR: req.body.BMR,
-          TDEE: req.body.TDEE,
-        },
-        { new: true, runValidators: true } // Retourner le document mis à jour et appliquer les validations
-      );
-    })
-    .then((updatedUser) => {
-      if (!updatedUser) {
-        return res.status(404).json({ result: false, error: "User not found" });
-      }
-
-      res.json({
-        result: true,
-        user: updatedUser,
-      });
-    })
-    .catch((error) => {
-      console.error("Error updating user:", error);
-      res.status(500).json({ result: false, error: error.message });
-    });
-});
-
-router.get("/:token", (req, res) => {
-  const token = req.params.token;
-
-  User.findOne({ token })
-
-    .then((user) => {
-      if (!user) {
-        return res.status(404).json({ result: false, error: "user not found" });
-      }
-      res.json({
-        result: true,
-        data: user,
-      });
-    })
-    .catch((error) => {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ result: false, error: error.message });
-    });
-});
-
-router.put("/newWeight/:token", (req, res) => {
-  const token = req.params.token;
-
-  User.findOne({ token })
-    .then((user) => {
-      if (!user) {
-        return res.status(404).json({ result: false, error: "User not found" });
-      }
-
-      // Ajouter le nouveau poids avec la date actuelle au tableau existant des poids
-      const newWeightEntry = req.body;
-      const updatedWeights = [...user.weights, newWeightEntry];
-
-      // Mettre à jour les informations de l'utilisateur
-      return User.findByIdAndUpdate(
-        user._id,
-        {
-          weights: updatedWeights,
-        },
-        { new: true, runValidators: true } // Retourner le document mis à jour et appliquer les validations
-      );
-    })
-    .then((updatedUser) => {
-      if (!updatedUser) {
-        return res.status(404).json({ result: false, error: "User not found" });
-      }
-
-      res.json({
-        result: true,
-        weights: updatedUser.weights,
-      });
-    })
-    .catch((error) => {
-      console.error("Error updating user:", error);
-      res.status(500).json({ result: false, error: error.message });
-    });
-});
-router.get("/weights/:token", (req, res) => {
-  const token = req.params.token;
-
-  User.findOne({ token })
-    .then((user) => {
-      if (!user) {
-        return res.status(404).json({ result: false, error: "User not found" });
-      }
-
-      res.json({
-        result: true,
-        weights: user.weights,
-      });
-    })
-    .catch((error) => {
-      console.error("Error fetching user weights:", error);
-      res.status(500).json({ result: false, error: error.message });
-    });
-});
 module.exports = router;
