@@ -1,20 +1,17 @@
 var express = require("express");
-
 var router = express.Router();
 const mongoose = require("mongoose");
 require("../models/connection");
 const Artists = require("../models/artists");
 
-// Définir le schéma Zod pour la route signup
+const Merchs = require("../models/merchs");
+
+//ARTISTS//
 
 router.post("/addArtist", (req, res) => {
   if (!req.body || Object.keys(req.body).length === 0) {
     return res.json({ result: false, error: "All fields must be specified" });
   }
-
-  // Valider les données du corps de la requête avec Zod
-
-  // Si la validation passe, poursuivre avec l'inscription
   Artists.findOne({ name: req.body.name }).then((data) => {
     if (data === null) {
       const newArtist = new Artists({
@@ -64,12 +61,9 @@ router.get("/artists", (req, res) => {
 router.delete("/deleteArtist", (req, res) => {
   const id = req.body.id;
 
-  // Vérifiez que l'ID est bien un ObjectId valide
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ result: false, error: "Invalid ID format" });
   }
-
-  // Trouver et supprimer l'artiste en une seule opération
   Artists.findByIdAndDelete(id)
     .then((artist) => {
       if (!artist) {
@@ -85,7 +79,7 @@ router.delete("/deleteArtist", (req, res) => {
       }
     })
     .catch((error) => {
-      console.error("Erreur lors de la suppression : ", error); // Log de l'erreur
+      console.error("Erreur lors de la suppression : ", error);
       return res.status(500).json({
         result: false,
         error: "An error occurred",
@@ -93,4 +87,86 @@ router.delete("/deleteArtist", (req, res) => {
       });
     });
 });
+
+//MERCHANDSING//
+
+router.post("/addMerch", (req, res) => {
+  if (!req.body || Object.keys(req.body).length === 0) {
+    return res.json({ result: false, error: "All fields must be specified" });
+  }
+  Merchs.findOne({ name: req.body.name }).then((data) => {
+    if (data === null) {
+      const newMerchs = new Merchs({
+        name: req.body.name,
+        img: req.body.img,
+        price: req.body.price,
+        description: req.body.description,
+        sizes: req.body.sizes,
+      });
+
+      newMerchs.save().then((newDoc) => {
+        res.json({
+          result: true,
+          merch: newDoc,
+
+          success: "Merch successfully added",
+        });
+      });
+    } else {
+      // L'utilisateur existe déjà dans la base de données
+      res.json({ result: false, error: "Merch already exists" });
+    }
+  });
+});
+
+router.get("/merchs", (req, res) => {
+  Merchs.find()
+    .then((data) => {
+      if (!data) {
+        return res
+          .status(404)
+          .json({ result: false, error: "Nothing to display" });
+      }
+
+      res.json({
+        result: true,
+        merchs: data,
+      });
+    })
+    .catch((error) => {
+      console.error("Error fetching Merchs:");
+      res.status(500).json({ result: false });
+    });
+});
+
+router.delete("/deleteMerch", (req, res) => {
+  const id = req.body.id;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ result: false, error: "Invalid ID format" });
+  }
+  Merchs.findByIdAndDelete(id)
+    .then((merch) => {
+      if (!merch) {
+        return res
+          .status(404)
+          .json({ result: false, error: "Merch not found" });
+      } else {
+        return res.status(200).json({
+          result: true,
+          success: "Merch successfully deleted",
+          merch: merch,
+        });
+      }
+    })
+    .catch((error) => {
+      console.error("Erreur lors de la suppression : ", error);
+      return res.status(500).json({
+        result: false,
+        error: "An error occurred",
+        details: error.message,
+      });
+    });
+});
+
 module.exports = router;
