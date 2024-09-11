@@ -39,7 +39,7 @@ const corsOptions = {
 // Use CORS middleware with the configured options
 app.use(cors(corsOptions));
 // Enable CORS middleware
-
+app.options("*", cors(corsOptions));
 // Use logging, JSON parsing, and other middlewares
 app.use(logger("dev"));
 app.use(express.json());
