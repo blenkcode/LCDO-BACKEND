@@ -15,14 +15,30 @@ var app = express();
 const cors = require("cors");
 
 // Update the allowed origins to include only your frontend domain
+const allowedOrigins = [
+  "https://lcdo-three.vercel.app", // Your frontend domain on Vercel
+  "http://localhost:3000", // Local development
+];
 
-app.use(
-  cors({
-    origin: "https://lcdo-three.vercel.app", // Frontend URL
-    methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
-    credentials: true,
-  })
-); // Enable CORS middleware
+// CORS configuration
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or Postman) and requests from allowedOrigins
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true, // Allow credentials (e.g., cookies, headers)
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS", // Allowed HTTP methods
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+};
+
+// Use CORS middleware with the configured options
+app.use(cors(corsOptions));
+// Enable CORS middleware
 
 // Use logging, JSON parsing, and other middlewares
 app.use(logger("dev"));
