@@ -23,17 +23,15 @@ const allowedOrigins = [
 // CORS options
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g., mobile apps or curl requests)
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
       callback(null, true);
     } else {
       callback(new Error("Not allowed by CORS"));
     }
   },
-  credentials: true, // Enable cookies or credentials
+  credentials: true, // Enable credentials if needed
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS", // Allowed methods
-  preflightContinue: false, // Do not pass the preflight response to the next handler
-  optionsSuccessStatus: 204, // Some browsers send 204 for successful preflight
+  optionsSuccessStatus: 204, // To support older browsers
 };
 
 app.use(cors(corsOptions)); // Enable CORS middleware
