@@ -16,7 +16,7 @@ const cors = require("cors");
 
 // Update the allowed origins to include only your frontend domain
 const allowedOrigins = [
-  "https://lcdo-ca18xt7gi-valentins-projects-78ff6046.vercel.app", // Add your frontend domain here
+  "https://lcdo-three.vercel.app/", // Add your frontend domain here
   "http://localhost:3000", // For local development
 ];
 
